@@ -130,7 +130,12 @@ class MainActivity : Activity() {
     }
 
     private fun openSocket(device: BluetoothDevice): BluetoothSocket {
-        bluetoothAdapter?.cancelDiscovery()
+        // We never start a scan, so this is only a precaution. Android 12+ requires BLUETOOTH_SCAN
+        // for it, which we don't ask for, so skip it if not allowed.
+        try {
+            bluetoothAdapter?.cancelDiscovery()
+        } catch (_: SecurityException) {
+        }
         try {
             return device.createRfcommSocketToServiceRecord(SPP_UUID).also { it.connect() }
         } catch (e: IOException) {
