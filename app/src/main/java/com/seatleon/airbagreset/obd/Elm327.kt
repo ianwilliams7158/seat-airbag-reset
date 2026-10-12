@@ -67,14 +67,25 @@ class Elm327(
     }
 
     private fun expectOk(cmd: String, required: Boolean = true) {
-        val reply = command(cmd)
+        var reply = command(cmd)
+        if (reply.none { it.contains("OK") } && reply.any { it.contains("?") }) {
+            // Some clone firmwares mis-parse commands without spaces (e.g. "ATST19" as "ATS" + "T19").
+            // A genuine ELM327 ignores spaces, so the spaced form is always valid to try.
+            reply = command(spaced(cmd))
+        }
         if (reply.none { it.contains("OK") }) {
             val msg = "Adapter rejected $cmd (reply: ${reply.joinToString(" ").ifEmpty { "nothing" }})"
             if (required) {
-                throw ElmException("$msg. This ELM327 clone does not appear to support raw CAN mode, which is needed to talk to VAG modules.")
+                throw ElmException("$msg. This ELM327 clone does not support raw CAN mode, which is needed to talk to VAG modules.")
             }
             log("Warning: $msg - continuing")
         }
+    }
+
+    private fun spaced(cmd: String): String {
+        val body = cmd.removePrefix("AT")
+        val mnemonic = MNEMONICS.firstOrNull { body.startsWith(it) } ?: return "AT $body"
+        return "AT $mnemonic ${body.substring(mnemonic.length)}".trim()
     }
 
     /**
@@ -123,4 +134,9 @@ class Elm327(
     }
 
     private fun Char.isHexDigit() = this in '0'..'9' || this in 'A'..'F' || this in 'a'..'f'
+
+    companion object {
+        // Longest first, so e.g. "SH200" matches "SH" rather than "S".
+        private val MNEMONICS = listOf("CAF", "CRA", "SH", "SP", "ST", "AT", "E", "L", "S", "H", "R")
+    }
 }

@@ -12,6 +12,7 @@ class FakeElmWithAirbagEcu(
     private val faultPresent: Boolean = false,
     private val answerClearWithPending: Boolean = true,
     private val clonePartial: Boolean = false,
+    private val needsSpaces: Boolean = false,
 ) {
     private val outBuf = StringBuilder()
     private val lineBuf = StringBuilder()
@@ -45,7 +46,9 @@ class FakeElmWithAirbagEcu(
         outBuf.append("\r>")
     }
 
-    private fun handle(cmd: String) {
+    private fun handle(raw: String) {
+        if (needsSpaces && (raw == "ATST19" || raw == "ATCAF0")) { reply(listOf("?")); return }
+        val cmd = raw.replace(" ", "")
         if (cmd.startsWith("AT")) {
             when {
                 cmd == "ATZ" -> reply(listOf("ELM327 v1.5"))

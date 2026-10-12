@@ -45,6 +45,12 @@ class AirbagModuleTest {
         assertEquals(listOf(589), remaining.map { it.code })
     }
 
+    @Test
+    fun retriesCommandsWithSpacesForPickyClones() {
+        val fake = FakeElmWithAirbagEcu(mutableListOf(Dtc(1280, 0x23)), needsSpaces = true)
+        assertEquals(listOf(1280), connect(fake).readFaults().map { it.code })
+    }
+
     @Test(expected = ElmException::class)
     fun rejectsAdapterWithoutRawCan() {
         connect(FakeElmWithAirbagEcu(mutableListOf(), clonePartial = true))
