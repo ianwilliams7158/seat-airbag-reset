@@ -18,8 +18,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
       - name: Unit tests and APK
         run: |
           chmod +x gradlew
