@@ -16,6 +16,7 @@ namespace AirbagReset
         private readonly Button _connectButton = new Button { Text = "Connect", AutoSize = true };
         private readonly Button _readButton = new Button { Text = "Read faults", AutoSize = true };
         private readonly Button _clearButton = new Button { Text = "Clear faults", AutoSize = true };
+        private readonly Button _busTestButton = new Button { Text = "Bus test", AutoSize = true };
         private readonly Label _statusLabel = new Label { Text = "Not connected", AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
         private readonly TextBox _resultBox = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), ScrollBars = ScrollBars.Vertical };
         private readonly TextBox _logBox = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, Font = new Font("Consolas", 9f), ScrollBars = ScrollBars.Vertical };
@@ -33,7 +34,7 @@ namespace AirbagReset
 
             var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8) };
             top.Controls.Add(new Label { Text = "Adapter port:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-            top.Controls.AddRange(new Control[] { _portBox, _refreshButton, _connectButton, _readButton, _clearButton, _statusLabel });
+            top.Controls.AddRange(new Control[] { _portBox, _refreshButton, _connectButton, _readButton, _clearButton, _busTestButton, _statusLabel });
 
             var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 220 };
             split.Panel1.Controls.Add(_resultBox);
@@ -50,6 +51,7 @@ namespace AirbagReset
             _connectButton.Click += (s, e) => { if (_module == null) Connect(); else Disconnect(); };
             _readButton.Click += (s, e) => ReadFaults();
             _clearButton.Click += (s, e) => ConfirmClear();
+            _busTestButton.Click += (s, e) => RunBusTest();
             FormClosed += (s, e) => Disconnect();
 
             _resultBox.Text =
@@ -101,6 +103,19 @@ namespace AirbagReset
                 {
                     CloseChannel();
                     throw;
+                }
+            });
+        }
+
+        private void RunBusTest()
+        {
+            string port = _portBox.SelectedItem as string;
+            if (port == null) return;
+            RunTask("Running bus test...", () =>
+            {
+                using (var channel = SerialPortChannel.OpenElm(port, Log))
+                {
+                    return BusTest.Run(new Elm327(channel, Log), Log);
                 }
             });
         }
@@ -198,6 +213,7 @@ namespace AirbagReset
             _refreshButton.Enabled = !_busy && !connected;
             _readButton.Enabled = !_busy && connected;
             _clearButton.Enabled = !_busy && connected;
+            _busTestButton.Enabled = !_busy && !connected && _portBox.SelectedItem != null;
             if (!_busy) _statusLabel.Text = connected ? "Connected" : "Not connected";
         }
 

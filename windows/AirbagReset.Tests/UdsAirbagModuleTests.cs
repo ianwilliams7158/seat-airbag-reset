@@ -66,13 +66,13 @@ namespace AirbagReset.Tests
                 if (cmd == "ATZ" || cmd == "ATI") Reply(new[] { "ELM327 v1.5" });
                 else if (cmd.StartsWith("ATCAF")) { _caf = cmd.EndsWith("1"); Reply(new[] { "OK" }); }
                 else if (cmd.StartsWith("ATSH")) { _header = Convert.ToInt32(cmd.Substring(4), 16); Reply(new[] { "OK" }); }
-                else if (cmd.StartsWith("ATCRA")) { _filter = Convert.ToInt32(cmd.Substring(5), 16); Reply(new[] { "OK" }); }
+                else if (cmd.StartsWith("ATCRA")) { _filter = cmd.Length > 5 ? Convert.ToInt32(cmd.Substring(5), 16) : -1; Reply(new[] { "OK" }); }
                 else if (cmd.StartsWith("ATFCSH")) { _flowControlHeader = Convert.ToInt32(cmd.Substring(6), 16); Reply(new[] { "OK" }); }
                 else Reply(new[] { "OK" });
                 return;
             }
             // Only a correctly configured ISO-TP request to 715 gets an answer.
-            if (!_caf || _header != 0x715 || _filter != 0x77F) { Reply(new[] { "NO DATA" }); return; }
+            if (!_caf || _header != 0x715 || (_filter != 0x77F && _filter != -1)) { Reply(new[] { "NO DATA" }); return; }
             var req = Enumerable.Range(0, cmd.Length / 2).Select(i => Convert.ToInt32(cmd.Substring(i * 2, 2), 16)).ToList();
             var replies = Uds(req);
             var lines = new List<string>();
@@ -167,6 +167,21 @@ namespace AirbagReset.Tests
             var remaining = Connect(fake, out _).ClearFaults();
             Assert.Single(remaining);
             Assert.True(remaining[0].IsActive);
+        }
+    }
+}
+
+namespace AirbagReset.Tests
+{
+    public class BusTestTests
+    {
+        [Fact]
+        public void RunsAgainstSilentBusWithoutThrowing()
+        {
+            var fake = new FakeElmWithUdsAirbag(new System.Collections.Generic.List<(int, int)>());
+            var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
+            Assert.Contains("Engine (standard OBD): no answer", summary);
+            Assert.Contains("Airbag UDS (715): ANSWERED", summary); // fake answers 715 once CAF1 is on
         }
     }
 }
