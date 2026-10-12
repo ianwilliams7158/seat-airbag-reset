@@ -49,7 +49,9 @@ namespace AirbagReset.Obd
             bool rawOk = Answered(Try(elm, "020100", 3000), "7E");
             summary.Add("4. Raw mode (ATCAF0) sending: " + (rawOk ? "OK - adapter sends raw frames correctly" : "FAILED - engine ignored the raw frame, this adapter mangles raw frames"));
 
-            log("=== Test 5: TP2.0 roll call ===");
+            log("=== Test 5: TP2.0 roll call, receive filter set with ATCF/ATCM to accept 2xx ===");
+            Try(elm, "ATCF200");
+            Try(elm, "ATCM700");
             Try(elm, "ATSH200");
             var tpAnswers = new List<string>();
             foreach (var (address, name) in Tp20Modules)
@@ -67,20 +69,16 @@ namespace AirbagReset.Obd
                     Try(elm, "ATSH200");
                 }
             }
-            summary.Add("5. TP2.0 modules answering: " + (tpAnswers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", tpAnswers)));
+            summary.Add("5. TP2.0 modules answering (2xx filter): " + (tpAnswers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", tpAnswers)));
 
-            log("=== Test 6: UDS scan 700-7FF with 'tester present' (harmless) ===");
+            log("=== Test 6: airbag TP2.0 and UDS with the receive filter fully open (ATCM000) ===");
+            Try(elm, "ATCF000");
+            Try(elm, "ATCM000");
+            Try(elm, "ATSH200");
+            summary.Add("6a. Airbag TP2.0, filter open: " + Describe(Try(elm, "15C00010000301", 3000)));
             Try(elm, "ATCAF1");
-            Try(elm, "ATST19");
-            var udsAnswers = new List<string>();
-            for (int id = 0x700; id <= 0x7FF; id++)
-            {
-                if (id == 0x7DF) continue; // functional broadcast, already tested
-                Try(elm, "ATSH" + id.ToString("X3"), 1000);
-                var reply = Try(elm, "3E00", 1500).Where(l => l != "NO DATA" && l != "OK" && l != "?").ToList();
-                if (reply.Count > 0) udsAnswers.Add(id.ToString("X3") + " -> " + string.Join(" ", reply));
-            }
-            summary.Add("6. UDS modules answering: " + (udsAnswers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", udsAnswers)));
+            Try(elm, "ATSH715");
+            summary.Add("6b. Airbag UDS 715, filter open: " + Describe(Try(elm, "3E00", 3000)));
 
             Try(elm, "ATST32");
             return "Bus test results:\r\n\r\n" + string.Join("\r\n", summary) +

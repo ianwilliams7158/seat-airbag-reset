@@ -23,6 +23,7 @@ namespace AirbagReset.Tests
         private readonly bool _needsSpaces;
         private int _header = 0x7DF;
         private int _filter;
+        private int _mask; // 0 = accept everything, like a real ELM327 after reset
         private int _ecuSeq;
         private int _rxLen = -1;
 
@@ -79,7 +80,9 @@ namespace AirbagReset.Tests
                 else if (cmd == "ATI") Reply(new[] { "ELM327 v1.5" });
                 else if (cmd == "ATCAF0" && _noRawCan) Reply(new[] { "?" });
                 else if (cmd.StartsWith("ATSH")) { _header = Convert.ToInt32(cmd.Substring(4), 16); Reply(new[] { "OK" }); }
-                else if (cmd.StartsWith("ATCRA")) { _filter = Convert.ToInt32(cmd.Substring(5), 16); Reply(new[] { "OK" }); }
+                else if (cmd.StartsWith("ATCF")) { _filter = Convert.ToInt32(cmd.Substring(4), 16); Reply(new[] { "OK" }); }
+                else if (cmd.StartsWith("ATCM")) { _mask = Convert.ToInt32(cmd.Substring(4), 16); Reply(new[] { "OK" }); }
+                else if (cmd.StartsWith("ATCRA")) { _filter = Convert.ToInt32(cmd.Substring(5), 16); _mask = 0x7FF; Reply(new[] { "OK" }); }
                 else Reply(new[] { "OK" });
                 return;
             }
@@ -104,7 +107,7 @@ namespace AirbagReset.Tests
                     output.AddRange(Frames(Kwp(req)));
                 }
             }
-            var visible = output.Where(l => Convert.ToInt32(l.Substring(0, 3), 16) == _filter).ToList();
+            var visible = output.Where(l => (Convert.ToInt32(l.Substring(0, 3), 16) & _mask) == (_filter & _mask)).ToList();
             Reply(visible.Count > 0 ? visible : new List<string> { "NO DATA" });
         }
 

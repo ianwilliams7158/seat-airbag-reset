@@ -41,7 +41,7 @@ namespace AirbagReset.Obd
     public class Elm327
     {
         // Longest first, so e.g. "SH200" matches "SH" rather than "S".
-        private static readonly string[] Mnemonics = { "FCSH", "FCSD", "FCSM", "CAF", "CRA", "SH", "SP", "ST", "AT", "E", "L", "S", "H", "R" };
+        private static readonly string[] Mnemonics = { "FCSH", "FCSD", "FCSM", "CAF", "CRA", "CF", "CM", "SH", "SP", "ST", "AT", "E", "L", "S", "H", "R" };
 
         private readonly IByteChannel _channel;
         private readonly Action<string> _log;
@@ -235,7 +235,18 @@ namespace AirbagReset.Obd
 
         public void SetHeader(int id) => ExpectOk("ATSH" + id.ToString("X3"));
 
-        public void SetReceiveFilter(int id) => ExpectOk("ATCRA" + id.ToString("X3"));
+        /// <summary>
+        /// Only accept replies from <paramref name="id"/>. Uses ATCF + ATCM rather than ATCRA: some clones
+        /// accept ATCRA but leave their default 7xx-only filter in place, which silently drops TP2.0 replies (2xx/3xx).
+        /// </summary>
+        public void SetReceiveFilter(int id) => SetReceiveFilter(id, 0x7FF);
+
+        /// <summary>Accept IDs where (id &amp; mask) == (filter &amp; mask). Mask 000 accepts everything.</summary>
+        public void SetReceiveFilter(int filter, int mask)
+        {
+            ExpectOk("ATCF" + filter.ToString("X3"));
+            ExpectOk("ATCM" + mask.ToString("X3"));
+        }
 
         /// <summary>Transmits one CAN frame and returns every frame received before the adapter timed out.</summary>
         public List<CanFrame> SendFrame(int[] data)

@@ -66,6 +66,8 @@ namespace AirbagReset.Tests
                 if (cmd == "ATZ" || cmd == "ATI") Reply(new[] { "ELM327 v1.5" });
                 else if (cmd.StartsWith("ATCAF")) { _caf = cmd.EndsWith("1"); Reply(new[] { "OK" }); }
                 else if (cmd.StartsWith("ATSH")) { _header = Convert.ToInt32(cmd.Substring(4), 16); Reply(new[] { "OK" }); }
+                else if (cmd.StartsWith("ATCF")) { _filter = Convert.ToInt32(cmd.Substring(4), 16); Reply(new[] { "OK" }); }
+                else if (cmd.StartsWith("ATCM")) { if (cmd.Substring(4) == "000") _filter = -1; Reply(new[] { "OK" }); }
                 else if (cmd.StartsWith("ATCRA")) { _filter = cmd.Length > 5 ? Convert.ToInt32(cmd.Substring(5), 16) : -1; Reply(new[] { "OK" }); }
                 else if (cmd.StartsWith("ATFCSH")) { _flowControlHeader = Convert.ToInt32(cmd.Substring(6), 16); Reply(new[] { "OK" }); }
                 else Reply(new[] { "OK" });
@@ -176,13 +178,22 @@ namespace AirbagReset.Tests
     public class BusTestTests
     {
         [Fact]
+        public void FindsTp20AirbagWithOpenFilter()
+        {
+            var fake = new FakeElmWithAirbagEcu(new System.Collections.Generic.List<Dtc>());
+            var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
+            Assert.Contains("Airbag (15): 21500D00003400701", summary);
+            Assert.Contains("6a. Airbag TP2.0, filter open: ANSWERED", summary);
+        }
+
+        [Fact]
         public void RunsAgainstSilentBusWithoutThrowing()
         {
             var fake = new FakeElmWithUdsAirbag(new System.Collections.Generic.List<(int, int)>());
             var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
             Assert.Contains("1. Engine standard OBD: no answer", summary);
-            Assert.Contains("5. TP2.0 modules answering: none", summary);
-            Assert.Contains("715 -> ", summary); // the fake UDS airbag answers tester present on 715 only
+            Assert.Contains("5. TP2.0 modules answering (2xx filter): none", summary);
+            Assert.Contains("6b. Airbag UDS 715, filter open: ANSWERED", summary);
         }
     }
 }
