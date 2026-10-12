@@ -41,7 +41,7 @@ namespace AirbagReset.Obd
     public class Elm327
     {
         // Longest first, so e.g. "SH200" matches "SH" rather than "S".
-        private static readonly string[] Mnemonics = { "FCSH", "FCSD", "FCSM", "CAF", "CRA", "CF", "CM", "SH", "SP", "ST", "AT", "E", "L", "S", "H", "R" };
+        private static readonly string[] Mnemonics = { "FCSH", "FCSD", "FCSM", "CAF", "CRA", "CF", "CM", "MA", "V", "SH", "SP", "ST", "AT", "E", "L", "S", "H", "R" };
 
         private readonly IByteChannel _channel;
         private readonly Action<string> _log;
@@ -162,6 +162,7 @@ namespace AirbagReset.Obd
             ExpectOk("ATST19", false);  // reply timeout 25 x 4 ms = 100 ms
             ExpectOk("ATCAF0");         // CAN auto-formatting off: we build TP2.0 frames ourselves
             ExpectOk("ATR1", false);    // wait for responses
+            ExpectOk("ATV1", false);    // send frames at their real length (TP2.0 set-up is 7 bytes), not padded to 8
         }
 
         /// <summary>
@@ -171,6 +172,7 @@ namespace AirbagReset.Obd
         public void ConfigureIsoTp(int requestId, int responseId)
         {
             ExpectOk("ATCAF1");
+            ExpectOk("ATV0", false);    // UDS modules expect frames padded to 8 bytes
             ExpectOk("ATH0");
             ExpectOk("ATST32", false);  // 200 ms reply timeout
             SetHeader(requestId);
@@ -231,6 +233,36 @@ namespace AirbagReset.Obd
             var bytes = new int[hex.Length / 2];
             for (int i = 0; i < bytes.Length; i++) bytes[i] = Convert.ToInt32(hex.Substring(i * 2, 2), 16);
             return bytes;
+        }
+
+        /// <summary>Listens to all CAN traffic (ATMA) for a while without sending anything; returns the lines seen.</summary>
+        public List<string> Monitor(int durationMs, int maxLines = 40)
+        {
+            Drain();
+            _log("> ATMA (listening for " + durationMs + " ms)");
+            _channel.Write(Encoding.ASCII.GetBytes("ATMA\r"));
+            Thread.Sleep(durationMs);
+            _channel.Write(Encoding.ASCII.GetBytes("\r")); // any character stops monitoring
+            var reply = new StringBuilder();
+            var buf = new byte[1024];
+            var timer = Stopwatch.StartNew();
+            while (timer.ElapsedMilliseconds < 3000)
+            {
+                int available = _channel.BytesAvailable;
+                if (available > 0)
+                {
+                    int n = _channel.Read(buf, 0, Math.Min(available, buf.Length));
+                    string text = Encoding.ASCII.GetString(buf, 0, n);
+                    reply.Append(text);
+                    if (text.Contains(">")) break;
+                }
+                else Thread.Sleep(5);
+            }
+            var lines = reply.ToString().Replace(">", "").Split('\r', '\n').Select(l => l.Trim())
+                .Where(l => l.Length > 0 && l != "ATMA").ToList();
+            foreach (var line in lines.Take(maxLines)) _log("< " + line);
+            if (lines.Count > maxLines) _log("< ... " + (lines.Count - maxLines) + " more lines");
+            return lines;
         }
 
         public void SetHeader(int id) => ExpectOk("ATSH" + id.ToString("X3"));

@@ -71,14 +71,27 @@ namespace AirbagReset.Obd
             }
             summary.Add("5. TP2.0 modules answering (2xx filter): " + (tpAnswers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", tpAnswers)));
 
-            log("=== Test 6: airbag TP2.0 and UDS with the receive filter fully open (ATCM000) ===");
+            log("=== Test 6: TP2.0 with exact frame length (ATV1 = variable DLC, no padding to 8 bytes) ===");
             Try(elm, "ATCF000");
             Try(elm, "ATCM000");
+            var v1 = Try(elm, "ATV1");
+            bool v1Ok = v1.Any(l => l.Contains("OK"));
+            summary.Add("6. ATV1 (exact frame length) supported: " + (v1Ok ? "yes" : "NO (" + string.Join(" ", v1) + ")"));
             Try(elm, "ATSH200");
-            summary.Add("6a. Airbag TP2.0, filter open: " + Describe(Try(elm, "15C00010000301", 3000)));
+            var v1Answers = new List<string>();
+            foreach (var (address, name) in Tp20Modules.Where(m => m.Address == 0x01 || m.Address == 0x15 || m.Address == 0x17 || m.Address == 0x19))
+            {
+                var reply = Try(elm, address.ToString("X2") + "C00010000301", 2000).Where(l => l != "NO DATA").ToList();
+                if (reply.Count > 0) v1Answers.Add(name + ": " + string.Join(" ", reply));
+            }
+            summary.Add("   TP2.0 answers with ATV1: " + (v1Answers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", v1Answers)));
+            Try(elm, "ATV0");
+
+            log("=== Test 7: listen to the bus for 2 seconds (nothing sent) ===");
             Try(elm, "ATCAF1");
-            Try(elm, "ATSH715");
-            summary.Add("6b. Airbag UDS 715, filter open: " + Describe(Try(elm, "3E00", 3000)));
+            var traffic = elm.Monitor(2000).Where(l => l.Replace(" ", "").Length >= 3 && l.Replace(" ", "").All(Uri.IsHexDigit)).ToList();
+            var ids = traffic.Select(l => l.Replace(" ", "")).Where(l => l.Length >= 3).Select(l => l.Substring(0, 3)).Distinct().ToList();
+            summary.Add("7. Bus traffic while idle: " + (traffic.Count == 0 ? "none (normal: OBD port is behind the gateway)" : traffic.Count + " frames, IDs " + string.Join(" ", ids.Take(20))));
 
             Try(elm, "ATST32");
             return "Bus test results:\r\n\r\n" + string.Join("\r\n", summary) +

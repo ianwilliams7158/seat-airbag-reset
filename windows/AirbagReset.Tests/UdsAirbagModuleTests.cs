@@ -61,6 +61,7 @@ namespace AirbagReset.Tests
         private void Handle(string raw)
         {
             string cmd = raw.Replace(" ", "");
+            if (cmd.Length == 0) { Reply(new string[0]); return; } // stops ATMA
             if (cmd.StartsWith("AT"))
             {
                 if (cmd == "ATZ" || cmd == "ATI") Reply(new[] { "ELM327 v1.5" });
@@ -183,7 +184,7 @@ namespace AirbagReset.Tests
             var fake = new FakeElmWithAirbagEcu(new System.Collections.Generic.List<Dtc>());
             var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
             Assert.Contains("Airbag (15): 21500D00003400701", summary);
-            Assert.Contains("6a. Airbag TP2.0, filter open: ANSWERED", summary);
+            Assert.Contains("Airbag: 21500D00003400701", summary);
         }
 
         [Fact]
@@ -193,7 +194,7 @@ namespace AirbagReset.Tests
             var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
             Assert.Contains("1. Engine standard OBD: no answer", summary);
             Assert.Contains("5. TP2.0 modules answering (2xx filter): none", summary);
-            Assert.Contains("6b. Airbag UDS 715, filter open: ANSWERED", summary);
+            Assert.Contains("6. ATV1 (exact frame length) supported: yes", summary);
         }
     }
 }

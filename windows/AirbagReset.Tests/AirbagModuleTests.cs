@@ -74,6 +74,7 @@ namespace AirbagReset.Tests
         {
             if (_needsSpaces && (raw == "ATST19" || raw == "ATCAF0")) { Reply(new[] { "?" }); return; }
             string cmd = raw.Replace(" ", "");
+            if (cmd.Length == 0) { Reply(new string[0]); return; } // stops ATMA
             if (cmd.StartsWith("AT"))
             {
                 if (cmd == "ATZ") Reply(new[] { "ELM327 v1.5" });
