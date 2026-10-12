@@ -8,11 +8,21 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.seatleon.airbagreset"
+        applicationId = "com.ianw.seatairbagreset"
         minSdk = 23
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.1"
+    }
+
+    // Fixed key so every CI build can update the installed app in place.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
