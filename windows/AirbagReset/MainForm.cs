@@ -27,7 +27,7 @@ namespace AirbagReset
 
         public MainForm()
         {
-            Text = "Seat Leon 1P Airbag Reset (module 15)";
+            Text = "Seat Leon 1P Airbag Reset (module 15) - v" + typeof(MainForm).Assembly.GetName().Version.ToString(2);
             Width = 760;
             Height = 680;
             StartPosition = FormStartPosition.CenterScreen;
