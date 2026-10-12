@@ -185,6 +185,7 @@ namespace AirbagReset.Tests
             var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
             Assert.Contains("Airbag (15): 21500D00003400701", summary);
             Assert.Contains("6. AIRBAG ANSWERS ON TP2.0", summary);
+            Assert.Contains("15: 1P0909605D  AIRBAG VW10   <== AIRBAG", summary);
         }
 
         [Fact]

@@ -75,11 +75,29 @@ namespace AirbagReset.Obd
                     if (reply != null) extra.Add(address.ToString("X2") + ": " + reply);
                 }
                 summary.Add("6. Other TP2.0 addresses answering: " + (extra.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", extra)));
+                found.AddRange(extra.Select(e => Convert.ToInt32(e.Substring(0, 2), 16)));
             }
             else
             {
                 summary.Add("6. AIRBAG ANSWERS ON TP2.0 - press Connect, then Read faults / Clear faults.");
             }
+
+            log("=== Test 7: identify each TP2.0 module (read-only) ===");
+            var ids = new List<string>();
+            foreach (int address in found)
+            {
+                string id;
+                try
+                {
+                    id = new AirbagModule(elm, log, address).ReadIdentification() ?? "(no identification)";
+                }
+                catch (System.IO.IOException e)
+                {
+                    id = "error: " + e.Message;
+                }
+                ids.Add(address.ToString("X2") + ": " + id + (AirbagConnector.IsAirbag(id) ? "   <== AIRBAG" : ""));
+            }
+            summary.Add("7. Module identification: " + (ids.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", ids)));
             Try(elm, "ATV0");
 
             Try(elm, "ATST32");

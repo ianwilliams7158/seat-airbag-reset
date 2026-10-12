@@ -75,22 +75,44 @@ namespace AirbagReset.Obd
 
     public static class AirbagConnector
     {
+        // The VAG "15 - Airbag" number is not always the module's TP2.0 address, so after 0x15 try the
+        // addresses that answered on the user's car, then other common ones. Each is identified before use.
+        private static readonly int[] Tp20Candidates = { 0x15, 0x05, 0x1D, 0x1F, 0x20, 0x33, 0x54, 0x07, 0x0B, 0x0D, 0x11, 0x13 };
+
+        /// <summary>True if a module identification string belongs to an airbag control unit.</summary>
+        public static bool IsAirbag(string identification) =>
+            identification != null &&
+            (identification.IndexOf("AIRBAG", StringComparison.OrdinalIgnoreCase) >= 0 ||
+             identification.Contains("909605") || identification.Contains("959655") || identification.Contains("959651"));
+
         /// <summary>
-        /// Finds the airbag module. Older PQ35 airbag units (1K0/1P0 909 605) use VW TP2.0 + KWP2000;
-        /// later ones (1K0/1P0/5K0 959 655, 2009+) use UDS on CAN IDs 715/77F. Tries both.
+        /// Finds the airbag module. Older PQ35 airbag units use VW TP2.0 + KWP2000; later ones use UDS on
+        /// CAN IDs 715/77F. Only a module that identifies itself as an airbag unit is used.
         /// </summary>
         public static IAirbagModule Connect(Elm327 elm, Action<string> log, out string identification)
         {
-            log("Trying VW TP2.0 (older airbag units)...");
-            var kwp = new AirbagModule(elm, log);
-            try
+            var seen = new List<string>();
+            log("Looking for the airbag module on VW TP2.0...");
+            foreach (int address in Tp20Candidates)
             {
-                identification = kwp.ReadIdentification();
-                return kwp;
-            }
-            catch (Tp20Exception e)
-            {
-                log("TP2.0: " + e.Message);
+                var module = new AirbagModule(elm, log, address);
+                string id;
+                try
+                {
+                    id = module.ReadIdentification();
+                }
+                catch (IOException e)
+                {
+                    log("TP2.0 address " + address.ToString("X2") + ": " + e.Message);
+                    continue;
+                }
+                log("TP2.0 address " + address.ToString("X2") + " is: " + (id ?? "(no identification)"));
+                seen.Add(address.ToString("X2") + " = " + (id ?? "?"));
+                if (IsAirbag(id))
+                {
+                    identification = id;
+                    return module;
+                }
             }
 
             log("Trying UDS (2009+ airbag units)...");
@@ -104,7 +126,9 @@ namespace AirbagReset.Obd
             {
                 log("UDS: " + e.Message);
             }
-            throw new ModuleException("The airbag module did not answer on either protocol. Check the ignition is ON (engine off) and the adapter is firmly plugged in.");
+            throw new ModuleException("Could not find the airbag module." +
+                (seen.Count > 0 ? " Modules found: " + string.Join("; ", seen) + "." : "") +
+                " Check the ignition is ON (engine off).");
         }
     }
 
@@ -116,18 +140,22 @@ namespace AirbagReset.Obd
         private readonly Elm327 _elm;
         private readonly Action<string> _log;
 
-        public AirbagModule(Elm327 elm, Action<string> log = null)
+        public AirbagModule(Elm327 elm, Action<string> log = null, int address = Address)
         {
             _elm = elm;
             _log = log ?? (_ => { });
+            ModuleAddress = address;
         }
 
-        public string Protocol => "VW TP2.0 / KWP2000";
+        /// <summary>TP2.0 logical address actually used to reach the module.</summary>
+        public int ModuleAddress { get; }
+
+        public string Protocol => "VW TP2.0 / KWP2000, address " + ModuleAddress.ToString("X2");
 
         private T WithChannel<T>(Func<Tp20Channel, T> block)
         {
             var channel = new Tp20Channel(_elm, _log);
-            channel.Open(Address);
+            channel.Open(ModuleAddress);
             try
             {
                 var session = channel.Request(new[] { 0x10, 0x89 });

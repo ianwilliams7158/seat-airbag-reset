@@ -26,10 +26,12 @@ namespace AirbagReset.Tests
         private int _mask; // 0 = accept everything, like a real ELM327 after reset
         private int _ecuSeq;
         private int _rxLen = -1;
+        private readonly int _ecuAddress;
 
         public FakeElmWithAirbagEcu(List<Dtc> faults, bool faultPresent = false, bool clearWithPending = true,
-            bool noRawCan = false, bool needsSpaces = false)
+            bool noRawCan = false, bool needsSpaces = false, int ecuAddress = 0x15)
         {
+            _ecuAddress = ecuAddress;
             Faults = faults;
             _faultPresent = faultPresent;
             _clearWithPending = clearWithPending;
@@ -90,7 +92,7 @@ namespace AirbagReset.Tests
             SentFrames.Add(_header.ToString("X3") + ":" + cmd);
             var d = Enumerable.Range(0, cmd.Length / 2).Select(i => Convert.ToInt32(cmd.Substring(i * 2, 2), 16)).ToArray();
             var output = new List<string>();
-            if (_header == 0x200 && d[0] == 0x15 && d[1] == 0xC0) output.Add("21500D00003400701");
+            if (_header == 0x200 && d[0] == _ecuAddress && d[1] == 0xC0) output.Add((0x200 + _ecuAddress).ToString("X3") + "00D00003400701");
             else if (_header == 0x740 && d[0] == 0xA0) output.Add("300A10F8AFF4AFF");
             else if (_header == 0x740 && d[0] == 0xA3) { output.Add("300A10F8AFF4AFF"); output.AddRange(_pendingFrames); _pendingFrames.Clear(); }
             else if (_header == 0x740 && (d[0] == 0xA8 || d[0] >> 4 == 0xB)) { }
@@ -159,6 +161,18 @@ namespace AirbagReset.Tests
             elm.InitialiseForRawCan();
             Assert.Equal("ELM327 v1.5", elm.Version);
             return new AirbagModule(elm, Console.WriteLine);
+        }
+
+        [Fact]
+        public void FindsAirbagAtOtherTp20AddressByIdentification()
+        {
+            var fake = new FakeElmWithAirbagEcu(new List<Dtc> { new Dtc(1280, 0x23) }, ecuAddress: 0x1F);
+            var elm = new Elm327(fake, Console.WriteLine);
+            elm.InitialiseForRawCan();
+            var module = AirbagConnector.Connect(elm, Console.WriteLine, out var id);
+            Assert.Equal("1P0909605D  AIRBAG VW10", id);
+            Assert.Equal(0x1F, ((AirbagModule)module).ModuleAddress);
+            Assert.Equal(new[] { 1280 }, module.ReadFaults().Select(f => f.Code));
         }
 
         [Fact]
