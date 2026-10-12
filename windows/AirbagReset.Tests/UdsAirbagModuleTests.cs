@@ -19,7 +19,7 @@ namespace AirbagReset.Tests
         private readonly bool _pendingOnly;
         private bool _caf = true;
         private int _header = 0x7DF;
-        private int _filter;
+        private int _filter = -1; // no filter after reset, like a real ELM327
         private int _flowControlHeader = -1;
         private bool _pendingSent;
 
@@ -180,8 +180,9 @@ namespace AirbagReset.Tests
         {
             var fake = new FakeElmWithUdsAirbag(new System.Collections.Generic.List<(int, int)>());
             var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
-            Assert.Contains("Engine (standard OBD): no answer", summary);
-            Assert.Contains("Airbag UDS (715): ANSWERED", summary); // fake answers 715 once CAF1 is on
+            Assert.Contains("1. Engine standard OBD: no answer", summary);
+            Assert.Contains("5. TP2.0 modules answering: none", summary);
+            Assert.Contains("715 -> ", summary); // the fake UDS airbag answers tester present on 715 only
         }
     }
 }
