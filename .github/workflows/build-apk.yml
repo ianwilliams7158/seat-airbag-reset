@@ -1,0 +1,45 @@
+name: Build Airbag Reset APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Unit tests and APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk SeatAirbagReset.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SeatAirbagReset-apk
+          path: SeatAirbagReset.apk
+
+      - name: Publish download link (GitHub release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: airbag-reset-latest
+          name: Seat Leon Airbag Reset (latest build)
+          make_latest: true
+          files: SeatAirbagReset.apk
+          body: |
+            Debug-signed APK built from ${{ github.sha }}.
+            Download SeatAirbagReset.apk on your phone and allow "install unknown apps" when prompted.
