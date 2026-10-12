@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- .NET Framework 4.8 ships with Windows 10/11, so the .exe needs nothing installed. -->
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>SeatAirbagReset</AssemblyName>
+    <RootNamespace>AirbagReset</RootNamespace>
+    <Version>1.0.0</Version>
+    <Product>Seat Leon 1P Airbag Reset</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+</Project>

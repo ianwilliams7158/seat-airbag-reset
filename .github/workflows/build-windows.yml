@@ -1,0 +1,43 @@
+name: Build Windows app
+
+on:
+  push:
+    paths:
+      - "windows/**"
+      - ".github/workflows/build-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Protocol tests
+        run: dotnet test windows/AirbagReset.Tests
+
+      - name: Build exe
+        run: dotnet build windows/AirbagReset -c Release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SeatAirbagReset-windows
+          path: windows/AirbagReset/bin/Release/net48/SeatAirbagReset.exe
+
+      - name: Publish download link (GitHub release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-app-latest
+          name: Seat Leon Airbag Reset for Windows (latest build)
+          make_latest: false
+          files: windows/AirbagReset/bin/Release/net48/SeatAirbagReset.exe
+          body: |
+            Windows build from ${{ github.sha }}. Needs Windows 10 or 11 (uses the built-in .NET Framework 4.8).
+            Download SeatAirbagReset.exe and double-click it. If SmartScreen warns, click "More info" then "Run anyway".

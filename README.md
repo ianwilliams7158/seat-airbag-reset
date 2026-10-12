@@ -57,3 +57,13 @@ The unit tests (`app/src/test`) run the full protocol against a simulated ELM327
 
 The app does not write coding, adaptation, or crash data. It reads and clears fault memory, the
 same operation as VCDS "Clear Codes" on module 15.
+
+## Windows version (USB ELM327)
+
+`windows/` contains the same tool as a Windows program, for USB ELM327 adapters (which appear as a COM port).
+Download `SeatAirbagReset.exe` from the **Seat Leon Airbag Reset for Windows (latest build)** release:
+https://github.com/ianwilliams7158/seat-airbag-reset/releases/download/windows-app-latest/SeatAirbagReset.exe
+
+It runs on Windows 10/11 with nothing to install. If Windows SmartScreen warns, click **More info → Run anyway**.
+Pick the adapter's COM port (Device Manager → Ports (COM & LPT) shows which one), press **Connect**, then
+**Read faults** / **Clear faults**. The program finds the adapter's baud rate automatically.
