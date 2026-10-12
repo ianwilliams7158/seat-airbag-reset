@@ -49,53 +49,68 @@ namespace AirbagReset.Obd
             bool rawOk = Answered(Try(elm, "020100", 3000), "7E");
             summary.Add("4. Raw mode (ATCAF0) sending: " + (rawOk ? "OK - adapter sends raw frames correctly" : "FAILED - engine ignored the raw frame, this adapter mangles raw frames"));
 
-            log("=== Test 5: TP2.0 roll call, receive filter set with ATCF/ATCM to accept 2xx ===");
-            Try(elm, "ATCF200");
-            Try(elm, "ATCM700");
-            Try(elm, "ATSH200");
+            log("=== Test 5: TP2.0 roll call (exact frame length, airbag first) ===");
+            var found = new List<int>();
             var tpAnswers = new List<string>();
-            foreach (var (address, name) in Tp20Modules)
+            Try(elm, "ATV1");
+            foreach (var (address, name) in Tp20Modules.OrderBy(m => m.Address == 0x15 ? 0 : 1))
             {
-                var reply = Try(elm, address.ToString("X2") + "C00010000301", 2000)
-                    .Select(l => l.Replace(" ", "")).Where(l => l.Length >= 7 && l.StartsWith("2")).ToList();
-                var ok = reply.FirstOrDefault(l => l.Length >= 17 && l.Substring(5, 2) == "D0");
-                if (reply.Count > 0) tpAnswers.Add(name + " (" + address.ToString("X2") + "): " + string.Join(" ", reply));
-                if (ok != null)
+                var reply = OpenAndClose(elm, address);
+                if (reply != null)
                 {
-                    // Close the channel the module just opened, then get back to the set-up ID.
-                    int tx = Convert.ToInt32(ok.Substring(11, 2), 16) | ((Convert.ToInt32(ok.Substring(13, 2), 16) & 0x07) << 8);
-                    Try(elm, "ATSH" + tx.ToString("X3"));
-                    Try(elm, "A8", 1000);
-                    Try(elm, "ATSH200");
+                    found.Add(address);
+                    tpAnswers.Add(name + " (" + address.ToString("X2") + "): " + reply);
                 }
             }
-            summary.Add("5. TP2.0 modules answering (2xx filter): " + (tpAnswers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", tpAnswers)));
+            summary.Add("5. TP2.0 modules answering: " + (tpAnswers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", tpAnswers)));
 
-            log("=== Test 6: TP2.0 with exact frame length (ATV1 = variable DLC, no padding to 8 bytes) ===");
-            Try(elm, "ATCF000");
-            Try(elm, "ATCM000");
-            var v1 = Try(elm, "ATV1");
-            bool v1Ok = v1.Any(l => l.Contains("OK"));
-            summary.Add("6. ATV1 (exact frame length) supported: " + (v1Ok ? "yes" : "NO (" + string.Join(" ", v1) + ")"));
-            Try(elm, "ATSH200");
-            var v1Answers = new List<string>();
-            foreach (var (address, name) in Tp20Modules.Where(m => m.Address == 0x01 || m.Address == 0x15 || m.Address == 0x17 || m.Address == 0x19))
+            if (!found.Contains(0x15))
             {
-                var reply = Try(elm, address.ToString("X2") + "C00010000301", 2000).Where(l => l != "NO DATA").ToList();
-                if (reply.Count > 0) v1Answers.Add(name + ": " + string.Join(" ", reply));
+                log("=== Test 6: airbag not at 0x15 - scanning TP2.0 addresses 00-7F ===");
+                var extra = new List<string>();
+                for (int address = 0x00; address <= 0x7F; address++)
+                {
+                    if (found.Contains(address)) continue;
+                    var reply = OpenAndClose(elm, address);
+                    if (reply != null) extra.Add(address.ToString("X2") + ": " + reply);
+                }
+                summary.Add("6. Other TP2.0 addresses answering: " + (extra.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", extra)));
             }
-            summary.Add("   TP2.0 answers with ATV1: " + (v1Answers.Count == 0 ? "none" : "\r\n     " + string.Join("\r\n     ", v1Answers)));
+            else
+            {
+                summary.Add("6. AIRBAG ANSWERS ON TP2.0 - press Connect, then Read faults / Clear faults.");
+            }
             Try(elm, "ATV0");
-
-            log("=== Test 7: listen to the bus for 2 seconds (nothing sent) ===");
-            Try(elm, "ATCAF1");
-            var traffic = elm.Monitor(2000).Where(l => l.Replace(" ", "").Length >= 3 && l.Replace(" ", "").All(Uri.IsHexDigit)).ToList();
-            var ids = traffic.Select(l => l.Replace(" ", "")).Where(l => l.Length >= 3).Select(l => l.Substring(0, 3)).Distinct().ToList();
-            summary.Add("7. Bus traffic while idle: " + (traffic.Count == 0 ? "none (normal: OBD port is behind the gateway)" : traffic.Count + " frames, IDs " + string.Join(" ", ids.Take(20))));
 
             Try(elm, "ATST32");
             return "Bus test results:\r\n\r\n" + string.Join("\r\n", summary) +
                    "\r\n\r\nPlease copy this box and the communication log (click in it, Ctrl+A, Ctrl+C) and send them to me.";
+        }
+
+        /// <summary>
+        /// Asks one TP2.0 address to open a channel. If it does, completes the handshake and closes it again
+        /// properly (so it doesn't keep repeating its answer). Returns the set-up reply, or null.
+        /// </summary>
+        private static string OpenAndClose(Elm327 elm, int address)
+        {
+            int replyId = 0x200 + address;
+            Try(elm, "ATCF200");
+            Try(elm, "ATCM700");
+            Try(elm, "ATSH200");
+            var reply = Try(elm, address.ToString("X2") + "C00010000301", 2000)
+                .Select(l => l.Replace(" ", "")).Where(l => l.Length >= 7 && l.StartsWith(replyId.ToString("X3"))).ToList();
+            if (reply.Count == 0) return null;
+            var ok = reply.FirstOrDefault(l => l.Length >= 17 && l.Substring(5, 2) == "D0");
+            if (ok != null)
+            {
+                int tx = Convert.ToInt32(ok.Substring(11, 2), 16) | ((Convert.ToInt32(ok.Substring(13, 2), 16) & 0x07) << 8);
+                Try(elm, "ATCF300");
+                Try(elm, "ATSH" + tx.ToString("X3"));
+                Try(elm, "A00F8AFF32FF", 1000);
+                Try(elm, "A8", 1000);
+            }
+            System.Threading.Thread.Sleep(200);
+            return reply[0];
         }
 
         private static bool Answered(List<string> lines, string idPrefix) =>

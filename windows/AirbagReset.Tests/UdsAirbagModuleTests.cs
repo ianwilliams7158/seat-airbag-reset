@@ -184,7 +184,7 @@ namespace AirbagReset.Tests
             var fake = new FakeElmWithAirbagEcu(new System.Collections.Generic.List<Dtc>());
             var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
             Assert.Contains("Airbag (15): 21500D00003400701", summary);
-            Assert.Contains("Airbag: 21500D00003400701", summary);
+            Assert.Contains("6. AIRBAG ANSWERS ON TP2.0", summary);
         }
 
         [Fact]
@@ -193,8 +193,8 @@ namespace AirbagReset.Tests
             var fake = new FakeElmWithUdsAirbag(new System.Collections.Generic.List<(int, int)>());
             var summary = BusTest.Run(new Elm327(fake, System.Console.WriteLine), System.Console.WriteLine);
             Assert.Contains("1. Engine standard OBD: no answer", summary);
-            Assert.Contains("5. TP2.0 modules answering (2xx filter): none", summary);
-            Assert.Contains("6. ATV1 (exact frame length) supported: yes", summary);
+            Assert.Contains("5. TP2.0 modules answering: none", summary);
+            Assert.Contains("6. Other TP2.0 addresses answering: none", summary);
         }
     }
 }

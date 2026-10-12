@@ -162,8 +162,13 @@ namespace AirbagReset.Obd
             ExpectOk("ATST19", false);  // reply timeout 25 x 4 ms = 100 ms
             ExpectOk("ATCAF0");         // CAN auto-formatting off: we build TP2.0 frames ourselves
             ExpectOk("ATR1", false);    // wait for responses
-            ExpectOk("ATV1", false);    // send frames at their real length (TP2.0 set-up is 7 bytes), not padded to 8
         }
+
+        /// <summary>
+        /// ATV1: send frames at their real length (VW TP2.0 modules ignore frames padded to 8 bytes).
+        /// ATV0: pad to 8 bytes (standard OBD/UDS modules ignore short frames).
+        /// </summary>
+        public void SetExactFrameLength(bool exact) => ExpectOk(exact ? "ATV1" : "ATV0", false);
 
         /// <summary>
         /// Switches to ISO-TP mode (ELM handles segmentation and flow control) for UDS modules:
@@ -172,7 +177,7 @@ namespace AirbagReset.Obd
         public void ConfigureIsoTp(int requestId, int responseId)
         {
             ExpectOk("ATCAF1");
-            ExpectOk("ATV0", false);    // UDS modules expect frames padded to 8 bytes
+            SetExactFrameLength(false); // UDS modules expect frames padded to 8 bytes
             ExpectOk("ATH0");
             ExpectOk("ATST32", false);  // 200 ms reply timeout
             SetHeader(requestId);

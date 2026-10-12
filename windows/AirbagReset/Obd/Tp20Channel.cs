@@ -30,6 +30,7 @@ namespace AirbagReset.Obd
         private int _lastRxSeq = -1;
         private List<int> _assembling;
         private int _expectedLength;
+        private int _rxId;
 
         public Tp20Channel(Elm327 elm, Action<string> log = null)
         {
@@ -41,10 +42,13 @@ namespace AirbagReset.Obd
 
         public void Open(int moduleAddress)
         {
+            int replyId = 0x200 + moduleAddress;
+            _elm.SetExactFrameLength(true);
             _elm.SetHeader(0x200);
-            _elm.SetReceiveFilter(0x200 + moduleAddress);
+            _elm.SetReceiveFilter(0x200, 0x700); // accept 2xx: some clones lose replies with an exact filter
             // Ask the module to open a channel: we will listen on 0x300, the module picks its own ID.
-            var replies = _elm.SendFrame(new[] { moduleAddress, 0xC0, 0x00, 0x10, 0x00, 0x03, 0x01 });
+            var replies = _elm.SendFrame(new[] { moduleAddress, 0xC0, 0x00, 0x10, 0x00, 0x03, 0x01 })
+                .Where(f => f.Id == replyId).ToList();
             var setup = replies.FirstOrDefault(f => f.Data.Length >= 7 && f.Data[1] == 0xD0);
             if (setup == null)
             {
@@ -57,10 +61,11 @@ namespace AirbagReset.Obd
             int txId = setup.Data[4] | ((setup.Data[5] & 0x07) << 8);
             _log(string.Format("Channel open: tester sends on {0:X3}, module replies on {1:X3}", txId, rxId));
 
+            _rxId = rxId;
             _elm.SetHeader(txId);
-            _elm.SetReceiveFilter(rxId);
+            _elm.SetReceiveFilter(rxId & 0x700, 0x700);
             var parameters = _elm.SendFrame(new[] { 0xA0, 0x0F, 0x8A, 0xFF, 0x32, 0xFF });
-            if (!parameters.Any(f => f.Data.Length > 0 && f.Data[0] == 0xA1))
+            if (!parameters.Any(f => f.Id == rxId && f.Data.Length > 0 && f.Data[0] == 0xA1))
                 throw new Tp20Exception("Module did not accept channel timing parameters");
             _txSeq = 0;
             _lastRxSeq = -1;
@@ -129,7 +134,7 @@ namespace AirbagReset.Obd
             foreach (var frame in frames)
             {
                 var d = frame.Data;
-                if (d.Length == 0) continue;
+                if (d.Length == 0 || frame.Id != _rxId) continue;
                 int opcode = d[0] >> 4;
                 int seq = d[0] & 0x0F;
                 switch (opcode)
