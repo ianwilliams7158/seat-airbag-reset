@@ -21,7 +21,7 @@ namespace AirbagReset
         private readonly TextBox _logBox = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, Font = new Font("Consolas", 9f), ScrollBars = ScrollBars.Vertical };
 
         private SerialPortChannel _channel;
-        private AirbagModule _module;
+        private IAirbagModule _module;
         private bool _busy;
 
         public MainForm()
@@ -93,10 +93,9 @@ namespace AirbagReset
                     var elm = new Elm327(channel, Log);
                     elm.InitialiseForRawCan();
                     Log("Adapter: " + elm.Version);
-                    var module = new AirbagModule(elm, Log);
-                    string id = module.ReadIdentification();
+                    var module = AirbagConnector.Connect(elm, Log, out string id);
                     _module = module;
-                    return "Connected to airbag module" + (id != null ? "\r\n" + id : "");
+                    return "Connected to airbag module (" + module.Protocol + ")" + (id != null ? "\r\n" + id : "");
                 }
                 catch (Exception)
                 {

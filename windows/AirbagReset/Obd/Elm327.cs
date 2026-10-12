@@ -41,7 +41,7 @@ namespace AirbagReset.Obd
     public class Elm327
     {
         // Longest first, so e.g. "SH200" matches "SH" rather than "S".
-        private static readonly string[] Mnemonics = { "CAF", "CRA", "SH", "SP", "ST", "AT", "E", "L", "S", "H", "R" };
+        private static readonly string[] Mnemonics = { "FCSH", "FCSD", "FCSM", "CAF", "CRA", "SH", "SP", "ST", "AT", "E", "L", "S", "H", "R" };
 
         private readonly IByteChannel _channel;
         private readonly Action<string> _log;
@@ -162,6 +162,75 @@ namespace AirbagReset.Obd
             ExpectOk("ATST19", false);  // reply timeout 25 x 4 ms = 100 ms
             ExpectOk("ATCAF0");         // CAN auto-formatting off: we build TP2.0 frames ourselves
             ExpectOk("ATR1", false);    // wait for responses
+        }
+
+        /// <summary>
+        /// Switches to ISO-TP mode (ELM handles segmentation and flow control) for UDS modules:
+        /// requests go to <paramref name="requestId"/>, replies are accepted from <paramref name="responseId"/>.
+        /// </summary>
+        public void ConfigureIsoTp(int requestId, int responseId)
+        {
+            ExpectOk("ATCAF1");
+            ExpectOk("ATH0");
+            ExpectOk("ATST32", false);  // 200 ms reply timeout
+            SetHeader(requestId);
+            SetReceiveFilter(responseId);
+            // Flow control frames must go to the module's request ID, not the OBD default.
+            ExpectOk("ATFCSH" + requestId.ToString("X3"));
+            ExpectOk("ATFCSD300000");
+            ExpectOk("ATFCSM1");
+        }
+
+        /// <summary>Sends an ISO-TP request (auto-formatting on, headers off) and returns every reassembled reply.</summary>
+        public List<int[]> SendIsoTp(int[] data)
+        {
+            string hex = string.Concat(data.Select(b => b.ToString("X2")));
+            var messages = new List<int[]>();
+            List<int> multi = null;
+            int multiLength = 0;
+            foreach (var line in Command(hex, 5000))
+            {
+                string compact = line.Replace(" ", "");
+                if (compact == "NODATA" || compact == "OK" || compact.Length == 0)
+                    continue;
+                if (compact.Length == 3 && compact.All(IsHex))
+                {
+                    // Multi-frame reply: total length, then lines "0:..." "1:..."
+                    multiLength = Convert.ToInt32(compact, 16);
+                    multi = new List<int>();
+                    continue;
+                }
+                int colon = compact.IndexOf(':');
+                if (colon > 0 && multi != null)
+                {
+                    multi.AddRange(ParseHex(compact.Substring(colon + 1)));
+                    if (multi.Count >= multiLength)
+                    {
+                        messages.Add(multi.Take(multiLength).ToArray());
+                        multi = null;
+                    }
+                    continue;
+                }
+                if (compact.Length % 2 == 0 && compact.All(IsHex))
+                {
+                    messages.Add(ParseHex(compact));
+                    continue;
+                }
+                if (compact == "?")
+                    throw new ElmException("Adapter did not understand request " + hex);
+                if (compact.Contains("ERROR") || compact.Contains("UNABLETOCONNECT"))
+                    throw new ElmException("CAN bus problem: " + line + ". Is the ignition on?");
+                _log("Ignoring unexpected adapter output: " + line);
+            }
+            if (multi != null && multi.Count > 0) messages.Add(multi.ToArray());
+            return messages;
+        }
+
+        private static int[] ParseHex(string hex)
+        {
+            var bytes = new int[hex.Length / 2];
+            for (int i = 0; i < bytes.Length; i++) bytes[i] = Convert.ToInt32(hex.Substring(i * 2, 2), 16);
+            return bytes;
         }
 
         public void SetHeader(int id) => ExpectOk("ATSH" + id.ToString("X3"));
